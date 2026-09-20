@@ -3,11 +3,18 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+
+    "rootDir": "src",
+    "outDir": "dist",
+
     "declaration": true,
     "declarationMap": true,
-    "outDir": "dist",
-    "rootDir": "src",
+    "sourceMap": true,
+
     "strict": true,
+    "noEmitOnError": true,
+    "isolatedModules": true,
+
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,

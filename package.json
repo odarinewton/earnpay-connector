@@ -1,15 +1,21 @@
 {
   "name": "earnpay-connector",
   "version": "1.0.0",
-  "description": "Generic TypeScript adapter for EarnPay wallet, escrow, FX, and payout flows.",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "description": "Generic TypeScript connector for EarnPay wallet, escrow, work, earnings, FX, payout, and agent settlement flows.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
       "default": "./dist/index.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
@@ -23,7 +29,11 @@
     "wallet",
     "fx",
     "mpesa",
-    "typescript"
+    "typescript",
+    "work",
+    "earnings",
+    "agents",
+    "settlement"
   ],
   "license": "MIT",
   "devDependencies": {
