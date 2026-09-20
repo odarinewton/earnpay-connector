@@ -126,6 +126,21 @@ EARNPAY_WEBHOOK_SECRET=...
 - The package fails closed when required platform config is missing.
 - No consumer app should reimplement SK accounting, FX logic, or payment rails.
 
+## EarnPay architecture model
+
+The connector is intentionally shaped around EarnPay's real provider model, not a local emulation of it. In practice, the provider stack is organized around these layers:
+
+- `identity` layer: user registration, login, and authentication/session handling
+- `wallet` layer: account and balance management, funding, confirmations, and history
+- `backend` ledger layer: canonical transaction and ledger state
+- `FX` layer: rate quoting and conversion between SK and fiat currencies
+- `escrow` layer: hold/release/reverse/dispute settlement semantics
+- `agents` layer: agent account lifecycle, budget controls, authorization, and settlement
+- `rail adapters`: MPesa and other provider rails for outbound and inbound movement
+- `event/webhook` layer: state change notifications from provider services
+
+This is why the connector exposes these domains as first-class clients. The package does not flatten all of EarnPay into one giant API; instead it keeps provider capabilities modular and explicit, mirroring the provider architecture so a consuming app can remain thin and safe.
+
 ## Why this is the right boundary
 
 The consuming app should only adapt provider behavior to its own business model. It should not rebuild EarnPay itself. This connector is the generic boundary; the app integrates through a thin adapter that maps local domain objects to provider calls without duplicating provider logic.
