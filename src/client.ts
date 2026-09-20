@@ -9,6 +9,17 @@ import type {
   EarnPaySession,
   EarnPayStkPush,
 } from './types';
+import { AgentsClient } from './agents';
+import { EarningsClient } from './earnings';
+import { EscrowClient } from './escrow';
+import { EventsClient } from './events';
+import { FxClient } from './fx';
+import { IdentityClient } from './identity';
+import { PaymentsClient } from './payments';
+import { PayoutsClient } from './payouts';
+import { TransactionsClient } from './transactions';
+import { WalletClient } from './wallet';
+import { WorkClient } from './work';
 
 export interface EarnPayClientConfig {
   walletUrl?: string;
@@ -27,33 +38,52 @@ export class EarnPayUnavailableError extends Error {
 }
 
 export class EarnPayClient {
-  private readonly walletUrl: string;
-  private readonly backendUrl: string;
-  private readonly mode: EarnPayMode;
-  private readonly serviceApiKey?: string;
+  public readonly walletUrl: string;
+  public readonly backendUrl: string;
+  public readonly mode: EarnPayMode;
+  public readonly serviceApiKey?: string;
+
+  public readonly identity: IdentityClient;
+  public readonly wallet: WalletClient;
+  public readonly payments: PaymentsClient;
+  public readonly escrow: EscrowClient;
+  public readonly work: WorkClient;
+  public readonly earnings: EarningsClient;
+  public readonly fx: FxClient;
+  public readonly payouts: PayoutsClient;
+  public readonly agents: AgentsClient;
+  public readonly transactions: TransactionsClient;
+  public readonly events: EventsClient;
 
   constructor(config: EarnPayClientConfig = {}) {
     this.walletUrl = config.walletUrl ?? process.env.EARNPAY_WALLET_URL ?? 'http://localhost:9500';
     this.backendUrl = config.backendUrl ?? process.env.EARNPAY_BACKEND_URL ?? 'http://localhost:8003';
     this.mode = config.mode ?? (process.env.EARNPAY_MODE === 'production' ? 'production' : 'sandbox');
     this.serviceApiKey = config.serviceApiKey ?? process.env.EARNPAY_SERVICE_API_KEY;
+
+    this.identity = new IdentityClient(this);
+    this.wallet = new WalletClient(this);
+    this.payments = new PaymentsClient(this);
+    this.escrow = new EscrowClient(this);
+    this.work = new WorkClient(this);
+    this.earnings = new EarningsClient(this);
+    this.fx = new FxClient(this);
+    this.payouts = new PayoutsClient(this);
+    this.agents = new AgentsClient(this);
+    this.transactions = new TransactionsClient(this);
+    this.events = new EventsClient(this);
   }
 
   async register(phoneE164: string, pin: string): Promise<EarnPaySession> {
-    return this.wallet('/wallet/register', { phone_e164: phoneE164, pin });
+    return this.identity.register(phoneE164, pin);
   }
 
   async login(phoneE164: string, pin: string): Promise<EarnPaySession> {
-    return this.wallet('/wallet/login', { phone_e164: phoneE164, pin });
+    return this.identity.authenticate(phoneE164, pin);
   }
 
   async balance(sessionToken: string): Promise<EarnPayBalance> {
-    const body = await this.request(`${this.walletUrl}/wallet/balance?session_token=${encodeURIComponent(sessionToken)}`);
-    return {
-      balanceSk: numberValue(body, ['balance_sk', 'balance']),
-      balanceMicrosk: numberValue(body, ['balance_microsk', 'sk_units']),
-      raw: body,
-    };
+    return this.wallet.balance(sessionToken);
   }
 
   async createEscrow(sessionToken: string, input: { toPhone: string; amountMicrosk: number; releaseAfter?: number; reference: string }): Promise<EarnPayEscrow> {
@@ -68,7 +98,7 @@ export class EarnPayClient {
     });
 
     return {
-      transactionId: stringValue(body, ['tx_id', 'transaction_id']),
+      transactionId: this.stringValue(body, ['tx_id', 'transaction_id']),
       raw: body,
     };
   }
@@ -78,21 +108,11 @@ export class EarnPayClient {
   }
 
   async quoteFiatToSk(amountMinor: number, currency = 'KES'): Promise<EarnPayFxQuote> {
-    const body = await this.request(`${this.backendUrl}/fx/quote/deposit`, { amount: amountMinor, currency });
-    return {
-      skUnits: numberValue(body, ['sk_units', 'sk_credited']),
-      rateUsed: numberValue(body, ['rate_used', 'rate']),
-      raw: body,
-    };
+    return this.fx.quote(amountMinor, currency);
   }
 
   async quoteSkToFiat(skUnits: number, targetCurrency = 'KES'): Promise<EarnPayFxQuote> {
-    const body = await this.request(`${this.backendUrl}/fx/quote/withdraw`, { sk_units: skUnits, target_currency: targetCurrency });
-    return {
-      fiatAmount: numberValue(body, ['fiat_amount', 'fiat_to_disburse']),
-      rateUsed: numberValue(body, ['rate_used', 'rate']),
-      raw: body,
-    };
+    return this.fx.convert(skUnits, targetCurrency);
   }
 
   async peg() {
@@ -124,8 +144,8 @@ export class EarnPayClient {
     });
 
     return {
-      checkoutRequestId: stringValue(body, ['CheckoutRequestID', 'checkout_request_id']),
-      merchantRequestId: stringValue(body, ['MerchantRequestID', 'merchant_request_id']),
+      checkoutRequestId: this.stringValue(body, ['CheckoutRequestID', 'checkout_request_id']),
+      merchantRequestId: this.stringValue(body, ['MerchantRequestID', 'merchant_request_id']),
       raw: body,
     };
   }
@@ -153,10 +173,10 @@ export class EarnPayClient {
     return this.mode;
   }
 
-  private async wallet(path: string, body: Record<string, unknown>): Promise<EarnPaySession> {
+  public async walletRequest(path: string, body: Record<string, unknown>): Promise<EarnPaySession> {
     const response = await this.request(`${this.walletUrl}${path}`, body);
-    const sessionToken = stringValue(response, ['session_token']);
-    const identityId = stringValue(response, ['identity_id']);
+    const sessionToken = this.stringValue(response, ['session_token']);
+    const identityId = this.stringValue(response, ['identity_id']);
 
     if (!sessionToken || !identityId) {
       throw new EarnPayUnavailableError('EarnPay returned an incomplete session.');
@@ -165,7 +185,7 @@ export class EarnPayClient {
     return { sessionToken, identityId };
   }
 
-  private async request(
+  public async request(
     url: string,
     body?: Record<string, unknown>,
     extraHeaders?: Record<string, string>,
@@ -208,22 +228,24 @@ export class EarnPayClient {
       throw new EarnPayUnavailableError(error instanceof Error ? error.message : 'EarnPay is temporarily unavailable.');
     }
   }
+
+  public stringValue(value: any, keys: string[]) {
+    for (const key of keys) {
+      if (typeof value?.[key] === 'string') {
+        return value[key] as string;
+      }
+    }
+    return '';
+  }
+
+  public numberValue(value: any, keys: string[]) {
+    for (const key of keys) {
+      if (typeof value?.[key] === 'number') {
+        return value[key] as number;
+      }
+    }
+    return undefined;
+  }
 }
 
-function stringValue(value: any, keys: string[]) {
-  for (const key of keys) {
-    if (typeof value?.[key] === 'string') {
-      return value[key] as string;
-    }
-  }
-  return '';
-}
-
-function numberValue(value: any, keys: string[]) {
-  for (const key of keys) {
-    if (typeof value?.[key] === 'number') {
-      return value[key] as number;
-    }
-  }
-  return undefined;
-}
+export default EarnPayClient;
