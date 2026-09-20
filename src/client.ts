@@ -37,6 +37,22 @@ export class EarnPayUnavailableError extends Error {
   }
 }
 
+export class EarnPayRequestError extends Error {
+  readonly status?: number;
+  readonly code?: string;
+  readonly retryable: boolean;
+  readonly raw?: unknown;
+
+  constructor(message: string, details: { status?: number; code?: string; raw?: unknown; retryable?: boolean } = {}) {
+    super(message);
+    this.name = 'EarnPayRequestError';
+    this.status = details.status;
+    this.code = details.code;
+    this.retryable = details.retryable ?? true;
+    this.raw = details.raw;
+  }
+}
+
 export class EarnPayClient {
   public readonly walletUrl: string;
   public readonly backendUrl: string;
@@ -212,7 +228,15 @@ export class EarnPayClient {
       }
 
       if (!response.ok) {
-        throw new Error(payload.message ?? payload.error ?? `EarnPay request failed (${response.status})`);
+        const providerCode = this.stringValue(payload, ['code', 'error_code', 'type']);
+        const providerMessage = payload.message ?? payload.error ?? payload.detail ?? `EarnPay request failed (${response.status})`;
+
+        throw new EarnPayRequestError(providerMessage, {
+          status: response.status,
+          code: providerCode || undefined,
+          raw: payload,
+          retryable: response.status === 408 || response.status === 429 || response.status >= 500,
+        });
       }
 
       return payload;
@@ -221,7 +245,7 @@ export class EarnPayClient {
         throw error;
       }
 
-      if (error instanceof EarnPayUnavailableError) {
+      if (error instanceof EarnPayUnavailableError || error instanceof EarnPayRequestError) {
         throw error;
       }
 
